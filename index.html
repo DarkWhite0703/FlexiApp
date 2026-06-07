@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Flexi - Gestion de Temps Dynamique</title>
+    <title>Flexiz - Gestion de Temps Dynamique</title>
 
     <!-- FAVICON PREMIUM EMBARQUÉ (Format SVG dynamique) -->
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='25' fill='%232563eb'/><path d='M30 50 A20 20 0 1 1 70 50 A20 20 0 0 1 40 67' fill='none' stroke='white' stroke-width='8' stroke-linecap='round'/><polygon points='30,67 45,55 45,79' fill='white'/></svg>">
@@ -83,7 +83,7 @@
                 </div>
                 <div>
                     <h1 class="text-xl font-bold tracking-tight flex items-center">
-                        <span>Flexi</span>
+                        <span>Flexiz</span>
                         <span id="cloudStatusIcon" class="ml-2 text-xs text-zinc-400" title="Stockage Local actif. Connectez-vous pour activer le Cloud.">
                             <i class="fa-solid fa-cloud-slash"></i>
                         </span>
@@ -479,7 +479,7 @@
 
                 <div class="space-y-2">
                     <h4 class="font-semibold text-sm">Gestion locale des données</h4>
-                    <p class="text-xs text-zinc-400 mb-2">Sauvegardez ou restaurez vos agendas Flexi locaux.</p>
+                    <p class="text-xs text-zinc-400 mb-2">Sauvegardez ou restaurez vos agendas Flexiz locaux.</p>
                     <div class="grid grid-cols-2 gap-2">
                         <button onclick="exportBackup()" class="py-2.5 bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 rounded-xl text-xs font-bold transition">
                             <i class="fa-solid fa-download mr-1"></i> Exporter
@@ -506,7 +506,7 @@
     <div id="accountModal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
         <div class="bg-white dark:bg-darkcard border border-zinc-200 dark:border-darkborder w-full max-w-md rounded-2xl overflow-hidden shadow-2xl" id="accountModalContent">
             <div class="px-6 py-4 border-b border-zinc-100 dark:border-darkborder flex items-center justify-between">
-                <h3 class="font-bold text-lg">Mon Compte Flexi</h3>
+                <h3 class="font-bold text-lg">Mon Compte Flexiz</h3>
                 <button onclick="toggleModal('accountModal')" class="w-8 h-8 rounded-full bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 transition">
                     <i class="fa-solid fa-xmark"></i>
                 </button>
@@ -554,7 +554,7 @@
         window.db = null;
         window.auth = null;
         window.useFirebaseCloud = false;
-        window.appId = typeof __app_id !== 'undefined' ? __app_id : 'default-flexi-app';
+        window.appId = typeof __app_id !== 'undefined' ? __app_id : 'default-flexiz-app';
 
         // Phase d'authentification initiale et écouteurs Cloud
         const configureFirebase = async () => {
@@ -664,7 +664,7 @@
 
         // Définition robuste et globale de saveTasksState (par Hoisting)
         function saveTasksState(fromCloud = false) {
-            localStorage.setItem(`flexi_tasks_local`, JSON.stringify(window.tasks));
+            localStorage.setItem(`flexiz_tasks_local`, JSON.stringify(window.tasks));
             if (!fromCloud && window.useFirebaseCloud && window.currentUserId) {
                 window.tasks.forEach(task => {
                     if (window.saveTaskToCloud) {
@@ -780,7 +780,7 @@
                 document.documentElement.classList.add('dark');
             }
 
-            const storedUser = localStorage.getItem('flexi_user');
+            const storedUser = localStorage.getItem('flexiz_user');
             if (storedUser) {
                 userEmail = storedUser;
                 document.getElementById('navUserEmail').innerText = userEmail;
@@ -788,7 +788,7 @@
                 toggleAuthUI(true);
             }
 
-            const storedTasks = localStorage.getItem(`flexi_tasks_local`);
+            const storedTasks = localStorage.getItem(`flexiz_tasks_local`);
             if (storedTasks) {
                 window.tasks = JSON.parse(storedTasks);
             } else {
@@ -1120,7 +1120,7 @@
             playEffect('completion');
 
             if ("Notification" in window && Notification.permission === "granted") {
-                new Notification("Flexi - Temps écoulé", {
+                new Notification("Flexiz - Temps écoulé", {
                     body: msg,
                     icon: "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='25' fill='%232563eb'/><path d='M30 50 A20 20 0 1 1 70 50 A20 20 0 0 1 40 67' fill='none' stroke='white' stroke-width='8'/></svg>"
                 });
@@ -1259,7 +1259,7 @@
             const email = document.getElementById('authEmail').value;
             if (email && email.includes('@')) {
                 userEmail = email;
-                localStorage.setItem('flexi_user', email);
+                localStorage.setItem('flexiz_user', email);
                 toggleAuthUI(true);
                 toggleModal('accountModal');
                 showToast("Synchro activée !", "success");
@@ -1270,7 +1270,7 @@
         }
 
         function handleLogout() {
-            localStorage.removeItem('flexi_user');
+            localStorage.removeItem('flexiz_user');
             userEmail = "Invité";
             toggleAuthUI(false);
             toggleModal('accountModal');
@@ -1283,7 +1283,7 @@
             const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(window.tasks));
             const downloadAnchor = document.createElement('a');
             downloadAnchor.setAttribute("href", dataStr);
-            downloadAnchor.setAttribute("download", `flexi_sauvegarde_${new Date().toISOString().slice(0,10)}.json`);
+            downloadAnchor.setAttribute("download", `flexiz_sauvegarde_${new Date().toISOString().slice(0,10)}.json`);
             document.body.appendChild(downloadAnchor);
             downloadAnchor.click();
             downloadAnchor.remove();
@@ -1403,7 +1403,7 @@
             spinner.classList.remove('hidden');
             btn.innerHTML = `<span>Optimisation... ⏳</span>`;
 
-            const systemPrompt = `Tu es un assistant d'organisation ultra-flexible appelé "Flexi IA". Ton rôle est d'aider l'utilisateur à réorganiser, planifier ou adapter ses tâches quotidiennes en fonction de ses imprévus, de sa fatigue ou de ses nouveaux objectifs.
+            const systemPrompt = `Tu es un assistant d'organisation ultra-flexible appelé "Flexiz IA". Ton rôle est d'aider l'utilisateur à réorganiser, planifier ou adapter ses tâches quotidiennes en fonction de ses imprévus, de sa fatigue ou de ses nouveaux objectifs.
             Tu reçois la liste actuelle de ses tâches et une instruction. Tu dois renvoyer la liste finale des tâches complétée, modifiée ou réordonnée au format JSON demandé. Garde les tâches accomplies (status: completed) intactes autant que possible, sauf si l'imprévu l'exige. Crée des identifiants (id) uniques de type string pour toute nouvelle tâche générée. Assure-toi que les heures prévues (time) soient logiques par rapport aux catégories (matin: 06h-12h, midi: 12h-14h, apresmidi: 14h-18h, soir: 18h-00h).`;
 
             const payload = {
@@ -1484,7 +1484,7 @@
             btn.disabled = true;
             btn.innerHTML = `<i class="fa-solid fa-circle-notch animate-spin text-xs"></i><span>Décomposition...</span>`;
 
-            const systemPromptBreakdown = `Tu es un assistant de décomposition de projet appelé "Flexi IA". Tu prends une tâche principale et tu la divises en 3 sous-tâches concrètes, actionnables et rapides (de 15 à 30 minutes chacune) qui permettent d'avancer ou de finaliser la tâche d'origine. Tu dois retourner le résultat sous forme d'un tableau JSON contenant uniquement les titres des sous-tâches (chaque titre doit être court, max 40 caractères).`;
+            const systemPromptBreakdown = `Tu es un assistant de décomposition de projet appelé "Flexiz IA". Tu prends une tâche principale et tu la divises en 3 sous-tâches concrètes, actionnables et rapides (de 15 à 30 minutes chacune) qui permettent d'avancer ou de finaliser la tâche d'origine. Tu dois retourner le résultat sous forme d'un tableau JSON contenant uniquement les titres des sous-tâches (chaque titre doit être court, max 40 caractères).`;
 
             const payload = {
                 contents: [{
