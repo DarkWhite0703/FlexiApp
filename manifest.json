@@ -1,0 +1,27 @@
+{
+  "short_name": "Rudo",
+  "name": "Rudo // Studio de Lecture Audio Premium",
+  "description": "Transformez vos textes et livres ebooks en expériences d'écoute immersives.",
+  "icons": [
+    {
+      "src": "favicon.svg",
+      "type": "image/svg+xml",
+      "sizes": "any"
+    },
+    {
+      "src": "icon-192.png",
+      "type": "image/png",
+      "sizes": "192x192"
+    },
+    {
+      "src": "icon-512.png",
+      "type": "image/png",
+      "sizes": "512x512"
+    }
+  ],
+  "start_url": "./index.html",
+  "background_color": "#09090b",
+  "theme_color": "#a855f7",
+  "display": "standalone",
+  "orientation": "portrait"
+}
