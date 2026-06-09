@@ -1,13 +1,12 @@
-const CACHE_NAME = 'Rudo-cache-v1';
+const CACHE_NAME = 'flexiz-v1';
 const ASSETS = [
   './',
   './index.html',
-  './style.css',
   './script.js',
-  './favicon.svg'
+  './style.css'
 ];
 
-// Installation du Service Worker et mise en cache des fichiers essentiels
+// Installation : Mise en cache des fichiers essentiels
 self.addEventListener('install', (e) => {
   e.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
@@ -16,7 +15,7 @@ self.addEventListener('install', (e) => {
   );
 });
 
-// Distribution des fichiers mis en cache si réseau indisponible
+// Interception des requêtes pour le mode hors-ligne
 self.addEventListener('fetch', (e) => {
   e.respondWith(
     caches.match(e.request).then((response) => {

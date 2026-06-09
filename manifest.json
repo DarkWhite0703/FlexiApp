@@ -1,27 +1,17 @@
 {
+  "name": "Flexiz - Gestion de Temps",
   "short_name": "Flexiz",
-  "name": "Flexiz - Gestion de Temps Dynamique",
-  "description": "Structurer votre vie avec faciliter",
+  "description": "L'agenda adaptatif temps-réel",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#09090b",
+  "theme_color": "#2563eb",
   "icons": [
     {
-      "src": "favicon.svg",
+      "src": "https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js",
+      "sizes": "512x512",
       "type": "image/svg+xml",
-      "sizes": "any"
-    },
-    {
-      "src": "icon-192.png",
-      "type": "image/png",
-      "sizes": "192x192"
-    },
-    {
-      "src": "icon-512.png",
-      "type": "image/png",
-      "sizes": "512x512"
+      "purpose": "any maskable"
     }
-  ],
-  "start_url": "./index.html",
-  "background_color": "#09090b",
-  "theme_color": "#a855f7",
-  "display": "standalone",
-  "orientation": "portrait"
+  ]
 }
