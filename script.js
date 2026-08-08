@@ -1,102 +1,14 @@
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js';
 import { getAuth, signInWithCustomToken, signInAnonymously, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js';
-import { getFirestore, collection, doc, setDoc, deleteDoc, onSnapshot } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js';
+import { getFirestore, doc, setDoc, onSnapshot } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js';
 
+// Configuration de l'état global
 window.db = null;
 window.auth = null;
 window.useFirebaseCloud = false;
 window.appId = typeof __app_id !== 'undefined' ? __app_id : 'default-flexiz-app';
-
-// Phase d'authentification initiale et écouteurs Cloud
-const configureFirebase = async () => {
-  if (typeof __firebase_config !== 'undefined' && __firebase_config) {
-    try {
-      const firebaseConfig = JSON.parse(__firebase_config);
-      const app = initializeApp(firebaseConfig);
-      window.auth = getAuth(app);
-      window.db = getFirestore(app);
-      
-      if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-        await signInWithCustomToken(window.auth, __initial_auth_token);
-      } else {
-        await signInAnonymously(window.auth);
-      }
-      
-      onAuthStateChanged(window.auth, (user) => {
-        if (user) {
-          window.useFirebaseCloud = true;
-          document.getElementById('cloudStatusIcon').className = "ml-2 text-xs text-emerald-500 animate-pulse";
-          document.getElementById('cloudStatusIcon').title = "Synchronisation Cloud active en temps réel.";
-          document.getElementById('navUserEmail').innerText = user.email || "Utilisateur Anonyme";
-          document.getElementById('authSection').classList.add('hidden');
-          document.getElementById('loggedInSection').classList.remove('hidden');
-          setupCloudListener();
-        } else {
-          fallbackToLocalStorage();
-        }
-      });
-    } catch (e) {
-      console.error("Firebase Auth Error, fallback to LocalStorage", e);
-      fallbackToLocalStorage();
-    }
-  } else {
-    fallbackToLocalStorage();
-  }
-};
-
-const fallbackToLocalStorage = () => {
-  window.useFirebaseCloud = false;
-  document.getElementById('cloudStatusIcon').className = "ml-2 text-xs text-zinc-400";
-  document.getElementById('navUserEmail').innerText = "Invité Local";
-  document.getElementById('authSection').classList.remove('hidden');
-  document.getElementById('loggedInSection').classList.add('hidden');
-  loadLocalTasks();
-};
-
-const setupCloudListener = () => {
-  if (!window.db || !window.auth.currentUser) return;
-  const userDocRef = doc(window.db, "users", window.auth.currentUser.uid, "apps", window.appId);
-  
-  onSnapshot(userDocRef, (docSnap) => {
-    if (docSnap.exists()) {
-      const cloudData = docSnap.data();
-      if (cloudData && Array.isArray(cloudData.tasks)) {
-        window.tasks = cloudData.tasks;
-        renderTasks();
-        updateCountdownState();
-      }
-    } else {
-      if (!window.tasks || window.tasks.length === 0) {
-        window.tasks = [];
-        renderTasks();
-      }
-    }
-  });
-};
-
-window.saveTasksState = async () => {
-  if (window.useFirebaseCloud && window.db && window.auth.currentUser) {
-    try {
-      const userDocRef = doc(window.db, "users", window.auth.currentUser.uid, "apps", window.appId);
-      await setDoc(userDocRef, { tasks: window.tasks }, { merge: true });
-    } catch (e) {
-      console.error("Cloud Save failed, writing local backup", e);
-      localStorage.setItem('flexiz_tasks', JSON.stringify(window.tasks));
-    }
-  } else {
-    localStorage.setItem('flexiz_tasks', JSON.stringify(window.tasks));
-  }
-};
-
-const loadLocalTasks = () => {
-  const local = localStorage.getItem('flexiz_tasks');
-  window.tasks = local ? JSON.parse(local) : [];
-  renderTasks();
-  updateCountdownState();
-};
-
-// Architecture de l'application & Variables d'état fondamentales
 window.tasks = [];
+
 let currentFilter = 'all';
 let currentMobileTab = 'matin';
 let timerInterval = null;
@@ -105,38 +17,39 @@ let timeRemaining = 0;
 let totalDurationSeconds = 0;
 let audioCtx = null;
 
+let aiTools = [];
+
+// Charger la configuration des outils au démarrage
+async function loadAiTools() {
+    const res = await fetch('./tools.json');
+    aiTools = await res.json();
+}
+
+loadAiTools();
+
 const iconsList = [
     'fa-briefcase', 'fa-code', 'fa-book', 'fa-dumbbell', 'fa-gavel', 'fa-utensils',
-    'fa-mug-hot', 'fa-bed', 'fa-plane', 'fa-car', 'fa-cart-shopping', 'fa-heartPulse',
+    'fa-mug-hot', 'fa-bed', 'fa-plane', 'fa-car', 'fa-cart-shopping', 'fa-heart-pulse',
     'fa-comments', 'fa-envelope', 'fa-music', 'fa-gamepad', 'fa-tv', 'fa-brush',
     'fa-seedling', 'fa-wallet', 'fa-gear', 'fa-wrench', 'fa-lightbulb', 'fa-phone'
 ];
-// Fonction pour quitter l'écran d'accueil et entrer dans l'application
+
+
+// Gestion de l'écran de bienvenue
 function enterApp() {
     const welcomeScreen = document.getElementById('welcomeScreen');
     const welcomeContent = document.getElementById('welcomeContent');
     
     if (welcomeScreen && welcomeContent) {
-        // Effet visuel de rétrécissement du contenu
         welcomeContent.classList.add('scale-95', 'opacity-0');
-        
-        // Effet visuel de fondu de l'arrière-plan
         welcomeScreen.classList.add('opacity-0', 'pointer-events-none');
-        
-        // Suppression définitive du DOM après la fin de l'animation pour libérer de la mémoire
-        setTimeout(() => {
-            welcomeScreen.remove();
-        }, 700);
-        
-        // Optionnel : Initialiser l'audio à l'entrée de l'utilisateur pour éviter les restrictions de bruitage du navigateur
-        if (typeof initAudio === 'function') {
-            initAudio();
-        }
+        setTimeout(() => welcomeScreen.remove(), 700);
+        initAudio();
     }
 }
-
-// Rendre la fonction publique pour le bouton HTML onclick="enterApp()"
 window.enterApp = enterApp;
+
+// Initialisation de l'application
 function initApp() {
     initTheme();
     generateIconGrid();
@@ -164,9 +77,98 @@ function toggleTheme() {
     }
 }
 
+// Configuration Firebase & LocalStorage
+const configureFirebase = async () => {
+    if (typeof __firebase_config !== 'undefined' && __firebase_config) {
+        try {
+            const firebaseConfig = JSON.parse(__firebase_config);
+            const app = initializeApp(firebaseConfig);
+            window.auth = getAuth(app);
+            window.db = getFirestore(app);
+            
+            if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                await signInWithCustomToken(window.auth, __initial_auth_token);
+            } else {
+                await signInAnonymously(window.auth);
+            }
+            
+            onAuthStateChanged(window.auth, (user) => {
+                if (user) {
+                    window.useFirebaseCloud = true;
+                    document.getElementById('cloudStatusIcon').className = "ml-2 text-xs text-emerald-500 animate-pulse";
+                    document.getElementById('cloudStatusIcon').title = "Synchronisation Cloud active en temps réel.";
+                    document.getElementById('navUserEmail').innerText = user.email || "Utilisateur Anonyme";
+                    document.getElementById('authSection').classList.add('hidden');
+                    document.getElementById('loggedInSection').classList.remove('hidden');
+                    setupCloudListener();
+                } else {
+                    fallbackToLocalStorage();
+                }
+            });
+        } catch (e) {
+            console.error("Erreur Firebase, bascule sur le LocalStorage", e);
+            fallbackToLocalStorage();
+        }
+    } else {
+        fallbackToLocalStorage();
+    }
+};
+
+const fallbackToLocalStorage = () => {
+    window.useFirebaseCloud = false;
+    document.getElementById('cloudStatusIcon').className = "ml-2 text-xs text-zinc-400";
+    document.getElementById('navUserEmail').innerText = "Invité Local";
+    document.getElementById('authSection').classList.remove('hidden');
+    document.getElementById('loggedInSection').classList.add('hidden');
+    loadLocalTasks();
+};
+
+const setupCloudListener = () => {
+    if (!window.db || !window.auth.currentUser) return;
+    const userDocRef = doc(window.db, "users", window.auth.currentUser.uid, "apps", window.appId);
+    
+    onSnapshot(userDocRef, (docSnap) => {
+        if (docSnap.exists()) {
+            const cloudData = docSnap.data();
+            if (cloudData && Array.isArray(cloudData.tasks)) {
+                window.tasks = cloudData.tasks;
+                renderTasks();
+                updateCountdownState();
+            }
+        } else {
+            if (!window.tasks || window.tasks.length === 0) {
+                window.tasks = [];
+                renderTasks();
+            }
+        }
+    });
+};
+
+window.saveTasksState = async () => {
+    if (window.useFirebaseCloud && window.db && window.auth.currentUser) {
+        try {
+            const userDocRef = doc(window.db, "users", window.auth.currentUser.uid, "apps", window.appId);
+            await setDoc(userDocRef, { tasks: window.tasks }, { merge: true });
+        } catch (e) {
+            console.error("Échec de la sauvegarde Cloud, écriture locale", e);
+            localStorage.setItem('flexiz_tasks', JSON.stringify(window.tasks));
+        }
+    } else {
+        localStorage.setItem('flexiz_tasks', JSON.stringify(window.tasks));
+    }
+};
+
+const loadLocalTasks = () => {
+    const local = localStorage.getItem('flexiz_tasks');
+    window.tasks = local ? JSON.parse(local) : [];
+    renderTasks();
+    updateCountdownState();
+};
+
+// Interface Utilisateur & Modals
 function generateIconGrid() {
     const grid = document.getElementById('iconGrid');
-    if(!grid) return;
+    if (!grid) return;
     grid.innerHTML = '';
     
     iconsList.forEach(icon => {
@@ -196,11 +198,11 @@ function toggleModal(modalId) {
         modal.classList.remove('hidden');
         setTimeout(() => {
             const content = modal.querySelector('div');
-            if(content) content.classList.remove('scale-95', 'opacity-0');
+            if (content) content.classList.remove('scale-95', 'opacity-0');
         }, 20);
     } else {
         const content = modal.querySelector('div');
-        if(content) content.classList.add('scale-95', 'opacity-0');
+        if (content) content.classList.add('scale-95', 'opacity-0');
         setTimeout(() => modal.classList.add('hidden'), 200);
     }
 }
@@ -213,7 +215,7 @@ function openCreateTask() {
     document.getElementById('selectedIcon').value = 'fa-briefcase';
     
     const now = new Date();
-    document.getElementById('taskTime').value = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+    document.getElementById('taskTime').value = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
     
     generateIconGrid();
     toggleModal('taskModal');
@@ -236,7 +238,7 @@ function openEditTask(id) {
     
     generateIconGrid();
     const activeBtn = document.querySelector(`.icon-select-btn[data-icon="${task.icon || 'fa-briefcase'}"]`);
-    if(activeBtn) activeBtn.click();
+    if (activeBtn) activeBtn.click();
     
     toggleModal('taskModal');
 }
@@ -294,6 +296,7 @@ function deleteTaskClick() {
     showToast("Tâche supprimée.", "info");
 }
 
+// Rendu des tâches & Colonnes
 function renderTasks() {
     const lists = { matin: [], midi: [], apresmidi: [], soir: [], backlog: [] };
     const query = document.getElementById('searchInput') ? document.getElementById('searchInput').value.toLowerCase() : '';
@@ -308,13 +311,13 @@ function renderTasks() {
     filtered.sort((a, b) => a.time.localeCompare(b.time));
     
     const counts = { matin: 0, midi: 0, apresmidi: 0, soir: 0, backlog: 0 };
-    window.tasks.forEach(t => { if(counts[t.category] !== undefined) counts[t.category]++; });
+    window.tasks.forEach(t => { if (counts[t.category] !== undefined) counts[t.category]++; });
     
     Object.keys(counts).forEach(cat => {
         const hCount = document.getElementById(`header-count-${cat}`);
         const mCount = document.getElementById(`count-${cat}`);
-        if(hCount) hCount.innerText = counts[cat];
-        if(mCount) mCount.innerText = counts[cat];
+        if (hCount) hCount.innerText = counts[cat];
+        if (mCount) mCount.innerText = counts[cat];
     });
     
     filtered.forEach(task => {
@@ -396,7 +399,7 @@ function switchMobileTab(tab) {
     
     const activeBtn = document.getElementById(`tab-${tab}`);
     if (activeBtn) {
-        if(tab === 'backlog') {
+        if (tab === 'backlog') {
             activeBtn.className = "mobile-tab px-4 py-2 rounded-full text-xs font-semibold bg-orange-500 text-white shadow-sm flex items-center space-x-2 shrink-0";
         } else {
             activeBtn.className = "mobile-tab px-4 py-2 rounded-full text-xs font-semibold bg-blue-600 text-white shadow-sm flex items-center space-x-2 shrink-0";
@@ -409,7 +412,7 @@ function setFilter(filter) {
     currentFilter = filter;
     ['all', 'pending', 'completed'].forEach(f => {
         const b = document.getElementById(`filter-${f}`);
-        if(b) b.className = `px-3 py-1.5 rounded-lg text-xs font-semibold ${f === filter ? 'bg-blue-600 text-white shadow-sm' : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700'}`;
+        if (b) b.className = `px-3 py-1.5 rounded-lg text-xs font-semibold ${f === filter ? 'bg-blue-600 text-white shadow-sm' : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700'}`;
     });
     renderTasks();
 }
@@ -421,7 +424,7 @@ function toggleTaskStatus(id) {
     if (!task) return;
     
     task.status = task.status === 'completed' ? 'pending' : 'completed';
-    if(task.status === 'completed' && activeTaskId === id) {
+    if (task.status === 'completed' && activeTaskId === id) {
         stopTimer();
         activeTaskId = null;
     }
@@ -437,6 +440,7 @@ function toggleTaskStatus(id) {
     }
 }
 
+// Glisser-déposer (Drag & Drop)
 function drag(e) { e.dataTransfer.setData("text", e.target.id); }
 function allowDrop(e) { e.preventDefault(); }
 function drop(e, category) {
@@ -448,10 +452,11 @@ function drop(e, category) {
         window.saveTasksState();
         renderTasks();
         updateCountdownState();
-        showToast(`Tâche déplacée avec succès.`, "success");
+        showToast("Tâche déplacée avec succès.", "success");
     }
 }
 
+// Fonctionnalité Time-Shifting
 function shiftAllTasks(minutes) {
     window.tasks.forEach(task => {
         if (task.category !== 'backlog' && task.status === 'pending') {
@@ -470,6 +475,7 @@ function shiftAllTasks(minutes) {
     showToast(`Planning global décalé de +${minutes} min.`, "info");
 }
 
+// Minuteur & Session de Focus
 function startFocusSession(id) {
     initAudio();
     const task = window.tasks.find(t => t.id === id);
@@ -518,7 +524,7 @@ function startTimer() {
             clearInterval(timerInterval);
             timerInterval = null;
             completeCurrentTask();
-            sendSystemNotification("Session terminée !", `La tâche en cours est finie.`);
+            sendSystemNotification("Session terminée !", "La tâche en cours est finie.");
         }
     }, 1000);
 }
@@ -553,42 +559,15 @@ function updateCountdownDisplay() {
     const mins = Math.floor((timeRemaining % 3600) / 60);
     const secs = timeRemaining % 60;
     
-    document.getElementById('countdownDisplay').innerText = `${String(hrs).padStart(2,'0')}:${String(mins).padStart(2,'0')}:${String(secs).padStart(2,'0')}`;
+    document.getElementById('countdownDisplay').innerText = `${String(hrs).padStart(2, '0')}:${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
     
     const progressPercent = totalDurationSeconds > 0 ? ((totalDurationSeconds - timeRemaining) / totalDurationSeconds) * 100 : 0;
     const circle = document.getElementById('progressCircle');
     if (circle) {
-        const offset = 100 - progressPercent;
-        circle.style.strokeDashoffset = offset;
+        circle.style.strokeDashoffset = 100 - progressPercent;
     }
 }
-function updateStatsWidget() {
-    const todayTasks = window.tasks.filter(t => t.category !== 'backlog');
-    const completed = todayTasks.filter(t => t.status === 'completed').length;
-    const total = todayTasks.length;
-    
-    const ratioSpan = document.getElementById('statsRatio');
-    if (ratioSpan) ratioSpan.innerText = `${completed}/${total}`;
-    
-    const percent = total > 0 ? Math.round((completed / total) * 100) : 0;
-    const percentText = document.getElementById('progressPercent');
-    if (percentText) percentText.innerText = `${percent}%`;
-    
-    // ========== AJOUT : ROTATION SYNCHRONISÉE DE L'ICÔNE ==========
-    const logoIcon = document.getElementById('logoIcon');
-    if (logoIcon) {
-        // Calcule l'angle (100% de tâches = 360 degrés de rotation)
-        const angle = (percent / 100) * 360;
-        logoIcon.style.transform = `rotate(${angle}deg)`;
-    }
-    // ==============================================================
-    
-    const circle = document.getElementById('progressCircle');
-    if (circle) {
-        const strokeOffset = 100 - percent;
-        circle.style.strokeDashoffset = strokeOffset;
-    }
-}
+
 function updateCountdownState() {
     const completed = window.tasks.filter(t => t.status === 'completed').length;
     const total = window.tasks.length;
@@ -599,6 +578,12 @@ function updateCountdownState() {
     const globalPercent = total > 0 ? Math.round((completed / total) * 100) : 0;
     const percentLabel = document.getElementById('progressPercent');
     if (percentLabel) percentLabel.innerText = `${globalPercent}%`;
+    
+    const logoIcon = document.getElementById('logoIcon');
+    if (logoIcon) {
+        const angle = (globalPercent / 100) * 360;
+        logoIcon.style.transform = `rotate(${angle}deg)`;
+    }
     
     if (!activeTaskId) {
         document.getElementById('countdownTaskTitle').innerText = "Aucune tâche en cours";
@@ -611,9 +596,10 @@ function updateCountdownState() {
     }
 }
 
+// Feedbacks visuels & audio
 function showToast(message, type = 'success') {
     const container = document.getElementById('toastContainer');
-    if(!container) return;
+    if (!container) return;
     
     const toast = document.createElement('div');
     toast.className = `p-4 rounded-xl shadow-xl border flex items-center space-x-3 pointer-events-auto transform translate-y-2 opacity-0 transition duration-300 bg-white dark:bg-zinc-900 ${type === 'success' ? 'border-emerald-500/30 text-emerald-600 dark:text-emerald-400' : 'border-blue-500/30 text-blue-600 dark:text-blue-400'}`;
@@ -653,7 +639,7 @@ function playEffect(type) {
             osc.start();
             osc.stop(audioCtx.currentTime + 0.4);
         }
-    } catch(e){}
+    } catch (e) {}
 }
 
 function triggerConfetti() {
@@ -665,7 +651,7 @@ function triggerConfetti() {
 function requestNotificationPermission() {
     if ("Notification" in window) {
         Notification.requestPermission().then(p => {
-            if(p === 'granted') showToast("Notifications activées !", "success");
+            if (p === 'granted') showToast("Notifications activées !", "success");
         });
     }
 }
@@ -676,85 +662,32 @@ function sendSystemNotification(title, body) {
     }
 }
 
+// Fonctionnalités IA
 function applySuggestion(text) {
     const area = document.getElementById('aiPromptInput');
-    if(area) area.value = text;
+    if (area) area.value = text;
 }
 
 async function runAIOptimizer(e) {
     e.preventDefault();
     const prompt = document.getElementById('aiPromptInput').value;
-    if(!prompt) return;
+    if (!prompt) return;
     
     const spinner = document.getElementById('aiSpinner');
     const btn = document.getElementById('btnSubmitAI');
     
-    if(spinner) spinner.classList.remove('hidden');
-    if(btn) btn.disabled = true;
+    if (spinner) spinner.classList.remove('hidden');
+    if (btn) btn.disabled = true;
     
     setTimeout(() => {
-        if(spinner) spinner.classList.add('hidden');
-        if(btn) btn.disabled = false;
+        if (spinner) spinner.classList.add('hidden');
+        if (btn) btn.disabled = false;
         
         shiftAllTasks(30);
         toggleModal('aiAssistantModal');
         showToast("L'IA a réorganisé votre planning (+30 min) ! ✨", "success");
-    }, 1500);
+    }, 1200);
 }
-
-function exportBackup() {
-    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(window.tasks));
-    const dlAnchorElem = document.createElement('a');
-    dlAnchorElem.setAttribute("href", dataStr);
-    dlAnchorElem.setAttribute("download", "flexiz_backup.json");
-    dlAnchorElem.click();
-}
-
-function importBackup(e) {
-    const fileReader = new FileReader();
-    fileReader.onload = function(event) {
-        try {
-            const parsed = JSON.parse(event.target.result);
-            if (Array.isArray(parsed)) {
-                window.tasks = parsed;
-                window.saveTasksState();
-                renderTasks();
-                updateCountdownState();
-                showToast("Sauvegarde importée avec succès.", "success");
-            }
-        } catch(ex) {
-            showToast("Fichier de sauvegarde invalide.", "info");
-        }
-    };
-    if(e.target.files[0]) fileReader.readAsText(e.target.files[0]);
-}
-
-window.addEventListener('resize', renderTasks);
-window.addEventListener('DOMContentLoaded', initApp);
-
-// ARRANGEMENT CRITIQUE : Exposition des fonctions au scope global (window) 
-// pour réparer les appels de boutons HTML onclick=""
-window.toggleModal = toggleModal;
-window.openCreateTask = openCreateTask;
-window.openEditTask = openEditTask;
-window.saveTask = saveTask;
-window.deleteTaskClick = deleteTaskClick;
-window.toggleTheme = toggleTheme;
-window.switchMobileTab = switchMobileTab;
-window.setFilter = setFilter;
-window.filterTasks = filterTasks;
-window.toggleTaskStatus = toggleTaskStatus;
-window.shiftAllTasks = shiftAllTasks;
-window.startFocusSession = startFocusSession;
-window.toggleTimer = toggleTimer;
-window.completeCurrentTask = completeCurrentTask;
-window.requestNotificationPermission = requestNotificationPermission;
-window.applySuggestion = applySuggestion;
-window.runAIOptimizer = runAIOptimizer;
-window.exportBackup = exportBackup;
-window.importBackup = importBackup;
-window.allowDrop = allowDrop;
-window.drop = drop;
 
 async function breakdownTaskWithAI() {
     const btn = document.getElementById('btnAIDecompose');
@@ -776,8 +709,8 @@ async function breakdownTaskWithAI() {
 
         const parts = Math.max(2, Math.floor(duration / 20));
         let subTasks = [];
-        for(let i = 1; i <= parts; i++) {
-            subTasks.push(`Étape ${i} : Déclinaison du livrable`);
+        for (let i = 1; i <= parts; i++) {
+            subTasks.push(`Étape ${i} : Déclinaison de ${taskTitle}`);
         }
 
         if (subTasks.length > 0 && timeInput) {
@@ -811,8 +744,6 @@ async function breakdownTaskWithAI() {
             playEffect('completion');
             showToast("Sous-tâches générées par l'IA ! ✨", "success");
             toggleModal('taskModal');
-        } else {
-            throw new Error();
         }
     } catch (err) {
         showToast("Échec de la décomposition avec l'IA.", "info");
@@ -821,4 +752,58 @@ async function breakdownTaskWithAI() {
         btn.innerHTML = originalHTML;
     }
 }
+
+// Importation & Exportation
+function exportBackup() {
+    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(window.tasks));
+    const dlAnchorElem = document.createElement('a');
+    dlAnchorElem.setAttribute("href", dataStr);
+    dlAnchorElem.setAttribute("download", "flexiz_backup.json");
+    dlAnchorElem.click();
+}
+
+function importBackup(e) {
+    const fileReader = new FileReader();
+    fileReader.onload = function(event) {
+        try {
+            const parsed = JSON.parse(event.target.result);
+            if (Array.isArray(parsed)) {
+                window.tasks = parsed;
+                window.saveTasksState();
+                renderTasks();
+                updateCountdownState();
+                showToast("Sauvegarde importée avec succès.", "success");
+            }
+        } catch (ex) {
+            showToast("Fichier de sauvegarde invalide.", "info");
+        }
+    };
+    if (e.target.files[0]) fileReader.readAsText(e.target.files[0]);
+}
+
+// Événements globaux & Exports dans le scope window
+window.addEventListener('resize', renderTasks);
+window.addEventListener('DOMContentLoaded', initApp);
+
+window.toggleModal = toggleModal;
+window.openCreateTask = openCreateTask;
+window.openEditTask = openEditTask;
+window.saveTask = saveTask;
+window.deleteTaskClick = deleteTaskClick;
+window.toggleTheme = toggleTheme;
+window.switchMobileTab = switchMobileTab;
+window.setFilter = setFilter;
+window.filterTasks = filterTasks;
+window.toggleTaskStatus = toggleTaskStatus;
+window.shiftAllTasks = shiftAllTasks;
+window.startFocusSession = startFocusSession;
+window.toggleTimer = toggleTimer;
+window.completeCurrentTask = completeCurrentTask;
+window.requestNotificationPermission = requestNotificationPermission;
+window.applySuggestion = applySuggestion;
+window.runAIOptimizer = runAIOptimizer;
 window.breakdownTaskWithAI = breakdownTaskWithAI;
+window.exportBackup = exportBackup;
+window.importBackup = importBackup;
+window.allowDrop = allowDrop;
+window.drop = drop;
