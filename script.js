@@ -1,7 +1,3 @@
-import { initializeApp } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js';
-import { getAuth, signInWithCustomToken, signInAnonymously, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js';
-import { getFirestore, doc, setDoc, onSnapshot } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js';
-
 // Configuration de l'état global
 window.db = null;
 window.auth = null;
@@ -17,23 +13,12 @@ let timeRemaining = 0;
 let totalDurationSeconds = 0;
 let audioCtx = null;
 
-let aiTools = [];
-
-// Charger la configuration des outils au démarrage
-async function loadAiTools() {
-    const res = await fetch('./tools.json');
-    aiTools = await res.json();
-}
-
-loadAiTools();
-
 const iconsList = [
     'fa-briefcase', 'fa-code', 'fa-book', 'fa-dumbbell', 'fa-gavel', 'fa-utensils',
     'fa-mug-hot', 'fa-bed', 'fa-plane', 'fa-car', 'fa-cart-shopping', 'fa-heart-pulse',
     'fa-comments', 'fa-envelope', 'fa-music', 'fa-gamepad', 'fa-tv', 'fa-brush',
     'fa-seedling', 'fa-wallet', 'fa-gear', 'fa-wrench', 'fa-lightbulb', 'fa-phone'
 ];
-
 
 // Gestion de l'écran de bienvenue
 function enterApp() {
@@ -77,10 +62,14 @@ function toggleTheme() {
     }
 }
 
-// Configuration Firebase & LocalStorage
+// Configuration Firebase & LocalStorage Sécurisée pour le Offline
 const configureFirebase = async () => {
-    if (typeof __firebase_config !== 'undefined' && __firebase_config) {
+    if (navigator.onLine && typeof __firebase_config !== 'undefined' && __firebase_config) {
         try {
+            const { initializeApp } = await import('https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js');
+            const { getAuth, signInWithCustomToken, signInAnonymously, onAuthStateChanged } = await import('https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js');
+            const { getFirestore, doc, setDoc, onSnapshot } = await import('https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js');
+
             const firebaseConfig = JSON.parse(__firebase_config);
             const app = initializeApp(firebaseConfig);
             window.auth = getAuth(app);
@@ -100,13 +89,13 @@ const configureFirebase = async () => {
                     document.getElementById('navUserEmail').innerText = user.email || "Utilisateur Anonyme";
                     document.getElementById('authSection').classList.add('hidden');
                     document.getElementById('loggedInSection').classList.remove('hidden');
-                    setupCloudListener();
+                    setupCloudListener(doc, onSnapshot);
                 } else {
                     fallbackToLocalStorage();
                 }
             });
         } catch (e) {
-            console.error("Erreur Firebase, bascule sur le LocalStorage", e);
+            console.log("Mode hors ligne ou erreur Firebase, bascule sur LocalStorage", e);
             fallbackToLocalStorage();
         }
     } else {
@@ -116,14 +105,18 @@ const configureFirebase = async () => {
 
 const fallbackToLocalStorage = () => {
     window.useFirebaseCloud = false;
-    document.getElementById('cloudStatusIcon').className = "ml-2 text-xs text-zinc-400";
-    document.getElementById('navUserEmail').innerText = "Invité Local";
-    document.getElementById('authSection').classList.remove('hidden');
-    document.getElementById('loggedInSection').classList.add('hidden');
+    const statusIcon = document.getElementById('cloudStatusIcon');
+    if (statusIcon) {
+        statusIcon.className = "ml-2 text-xs text-zinc-400";
+        statusIcon.title = "Mode Hors-Ligne (Données sauvegardées localement)";
+    }
+    const userEmail = document.getElementById('navUserEmail');
+    if (userEmail) userEmail.innerText = "Mode Hors Ligne";
+    
     loadLocalTasks();
 };
 
-const setupCloudListener = () => {
+const setupCloudListener = (doc, onSnapshot) => {
     if (!window.db || !window.auth.currentUser) return;
     const userDocRef = doc(window.db, "users", window.auth.currentUser.uid, "apps", window.appId);
     
@@ -145,16 +138,15 @@ const setupCloudListener = () => {
 };
 
 window.saveTasksState = async () => {
-    if (window.useFirebaseCloud && window.db && window.auth.currentUser) {
+    localStorage.setItem('flexiz_tasks', JSON.stringify(window.tasks));
+    if (navigator.onLine && window.useFirebaseCloud && window.db && window.auth.currentUser) {
         try {
+            const { doc, setDoc } = await import('https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js');
             const userDocRef = doc(window.db, "users", window.auth.currentUser.uid, "apps", window.appId);
             await setDoc(userDocRef, { tasks: window.tasks }, { merge: true });
         } catch (e) {
-            console.error("Échec de la sauvegarde Cloud, écriture locale", e);
-            localStorage.setItem('flexiz_tasks', JSON.stringify(window.tasks));
+            console.error("Sauvegarde Cloud échouée, conservation locale", e);
         }
-    } else {
-        localStorage.setItem('flexiz_tasks', JSON.stringify(window.tasks));
     }
 };
 
@@ -436,7 +428,7 @@ function toggleTaskStatus(id) {
     if (task.status === 'completed') {
         playEffect('completion');
         triggerConfetti();
-        showToast("Tâche complétée ! Félicitations.", "success");
+        showToast("Tâche complétée !", "success");
     }
 }
 
@@ -456,7 +448,7 @@ function drop(e, category) {
     }
 }
 
-// Fonctionnalité Time-Shifting
+// Time-Shifting
 function shiftAllTasks(minutes) {
     window.tasks.forEach(task => {
         if (task.category !== 'backlog' && task.status === 'pending') {
@@ -475,7 +467,7 @@ function shiftAllTasks(minutes) {
     showToast(`Planning global décalé de +${minutes} min.`, "info");
 }
 
-// Minuteur & Session de Focus
+// Minuteur & Session Focus
 function startFocusSession(id) {
     initAudio();
     const task = window.tasks.find(t => t.id === id);
@@ -564,7 +556,7 @@ function updateCountdownDisplay() {
     const progressPercent = totalDurationSeconds > 0 ? ((totalDurationSeconds - timeRemaining) / totalDurationSeconds) * 100 : 0;
     const circle = document.getElementById('progressCircle');
     if (circle) {
-        circle.style.strokeDashoffset = 100 - progressPercent;
+        circle.style.strokeDashoffset = 100.53 - (progressPercent / 100) * 100.53;
     }
 }
 
@@ -592,7 +584,7 @@ function updateCountdownState() {
         document.getElementById('btnPlayPause').disabled = true;
         document.getElementById('btnComplete').disabled = true;
         const circle = document.getElementById('progressCircle');
-        if (circle) circle.style.strokeDashoffset = 100;
+        if (circle) circle.style.strokeDashoffset = 100.53;
     }
 }
 
@@ -662,7 +654,7 @@ function sendSystemNotification(title, body) {
     }
 }
 
-// Fonctionnalités IA
+// Fonctionnalités d'Ajustement / IA (Adaptative Hors-Ligne)
 function applySuggestion(text) {
     const area = document.getElementById('aiPromptInput');
     if (area) area.value = text;
@@ -679,14 +671,23 @@ async function runAIOptimizer(e) {
     if (spinner) spinner.classList.remove('hidden');
     if (btn) btn.disabled = true;
     
+    // Détection des minutes demandées dans le texte ou décalage par défaut (+30 min)
+    let minutesToShift = 30;
+    const match = prompt.match(/(\d+)\s*min/i);
+    if (match && match[1]) {
+        minutesToShift = parseInt(match[1]);
+    } else if (prompt.toLowerCase().includes('1h')) {
+        minutesToShift = 60;
+    }
+
     setTimeout(() => {
         if (spinner) spinner.classList.add('hidden');
         if (btn) btn.disabled = false;
         
-        shiftAllTasks(30);
+        shiftAllTasks(minutesToShift);
         toggleModal('aiAssistantModal');
-        showToast("L'IA a réorganisé votre planning (+30 min) ! ✨", "success");
-    }, 1200);
+        showToast(`Planning réorganisé (+${minutesToShift} min) !`, "success");
+    }, 800);
 }
 
 async function breakdownTaskWithAI() {
@@ -695,7 +696,7 @@ async function breakdownTaskWithAI() {
     
     try {
         btn.disabled = true;
-        btn.innerHTML = `<i class="fa-solid fa-circle-notch animate-spin text-xs"></i> <span>Analyse...</span>`;
+        btn.innerHTML = `<i class="fa-solid fa-circle-notch animate-spin text-xs"></i> <span>Décomposition...</span>`;
         
         const taskTitle = document.getElementById('taskTitle').value;
         const duration = parseInt(document.getElementById('taskDuration').value) || 30;
@@ -710,7 +711,7 @@ async function breakdownTaskWithAI() {
         const parts = Math.max(2, Math.floor(duration / 20));
         let subTasks = [];
         for (let i = 1; i <= parts; i++) {
-            subTasks.push(`Étape ${i} : Déclinaison de ${taskTitle}`);
+            subTasks.push(`Étape ${i} : ${taskTitle}`);
         }
 
         if (subTasks.length > 0 && timeInput) {
@@ -742,11 +743,11 @@ async function breakdownTaskWithAI() {
             updateCountdownState();
             
             playEffect('completion');
-            showToast("Sous-tâches générées par l'IA ! ✨", "success");
+            showToast("Sous-tâches générées avec succès ! ✨", "success");
             toggleModal('taskModal');
         }
     } catch (err) {
-        showToast("Échec de la décomposition avec l'IA.", "info");
+        showToast("Échec de la décomposition.", "info");
     } finally {
         btn.disabled = false;
         btn.innerHTML = originalHTML;
