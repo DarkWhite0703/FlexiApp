@@ -1,7 +1,3 @@
-import { initializeApp } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js';
-import { getAuth, signInWithCustomToken, signInAnonymously, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js';
-import { getFirestore, doc, setDoc, onSnapshot } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js';
-
 // Configuration de l'état global
 window.db = null;
 window.auth = null;
@@ -66,10 +62,14 @@ function toggleTheme() {
     }
 }
 
-// Configuration Firebase & LocalStorage
+// Configuration Firebase & LocalStorage Sécurisée pour le Offline
 const configureFirebase = async () => {
-    if (typeof __firebase_config !== 'undefined' && __firebase_config) {
+    if (navigator.onLine && typeof __firebase_config !== 'undefined' && __firebase_config) {
         try {
+            const { initializeApp } = await import('https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js');
+            const { getAuth, signInWithCustomToken, signInAnonymously, onAuthStateChanged } = await import('https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js');
+            const { getFirestore, doc, setDoc, onSnapshot } = await import('https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js');
+
             const firebaseConfig = JSON.parse(__firebase_config);
             const app = initializeApp(firebaseConfig);
             window.auth = getAuth(app);
@@ -89,13 +89,13 @@ const configureFirebase = async () => {
                     document.getElementById('navUserEmail').innerText = user.email || "Utilisateur Anonyme";
                     document.getElementById('authSection').classList.add('hidden');
                     document.getElementById('loggedInSection').classList.remove('hidden');
-                    setupCloudListener();
+                    setupCloudListener(doc, onSnapshot);
                 } else {
                     fallbackToLocalStorage();
                 }
             });
         } catch (e) {
-            console.error("Erreur Firebase, bascule sur le LocalStorage", e);
+            console.log("Mode hors ligne ou erreur Firebase, bascule sur LocalStorage", e);
             fallbackToLocalStorage();
         }
     } else {
@@ -105,14 +105,18 @@ const configureFirebase = async () => {
 
 const fallbackToLocalStorage = () => {
     window.useFirebaseCloud = false;
-    document.getElementById('cloudStatusIcon').className = "ml-2 text-xs text-zinc-400";
-    document.getElementById('navUserEmail').innerText = "Invité Local";
-    document.getElementById('authSection').classList.remove('hidden');
-    document.getElementById('loggedInSection').classList.add('hidden');
+    const statusIcon = document.getElementById('cloudStatusIcon');
+    if (statusIcon) {
+        statusIcon.className = "ml-2 text-xs text-zinc-400";
+        statusIcon.title = "Mode Hors-Ligne (Données sauvegardées localement)";
+    }
+    const userEmail = document.getElementById('navUserEmail');
+    if (userEmail) userEmail.innerText = "Mode Hors Ligne";
+    
     loadLocalTasks();
 };
 
-const setupCloudListener = () => {
+const setupCloudListener = (doc, onSnapshot) => {
     if (!window.db || !window.auth.currentUser) return;
     const userDocRef = doc(window.db, "users", window.auth.currentUser.uid, "apps", window.appId);
     
@@ -134,16 +138,15 @@ const setupCloudListener = () => {
 };
 
 window.saveTasksState = async () => {
-    if (window.useFirebaseCloud && window.db && window.auth.currentUser) {
+    localStorage.setItem('flexiz_tasks', JSON.stringify(window.tasks));
+    if (navigator.onLine && window.useFirebaseCloud && window.db && window.auth.currentUser) {
         try {
+            const { doc, setDoc } = await import('https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js');
             const userDocRef = doc(window.db, "users", window.auth.currentUser.uid, "apps", window.appId);
             await setDoc(userDocRef, { tasks: window.tasks }, { merge: true });
         } catch (e) {
-            console.error("Échec de la sauvegarde Cloud, écriture locale", e);
-            localStorage.setItem('flexiz_tasks', JSON.stringify(window.tasks));
+            console.error("Sauvegarde Cloud échouée, conservation locale", e);
         }
-    } else {
-        localStorage.setItem('flexiz_tasks', JSON.stringify(window.tasks));
     }
 };
 
@@ -153,20 +156,6 @@ const loadLocalTasks = () => {
     renderTasks();
     updateCountdownState();
 };
-
-// Fonction pour gérer la sélection de catégorie au clic sur les cartes avec icônes
-function selectCategory(catVal, btnElement) {
-    // 1. Mettre à jour l'input caché utilisé par le reste de votre script
-    document.getElementById('taskCategory').value = catVal;
-    
-    // 2. Réinitialiser le style de tous les boutons de catégorie
-    document.querySelectorAll('.cat-btn').forEach(btn => {
-        btn.className = "cat-btn flex items-center space-x-2 p-3 rounded-xl border border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-400 text-xs font-medium transition";
-    });
-    
-    // 3. Appliquer le style "actif" (bordure bleue et fond légèrement bleuté) au bouton cliqué
-    btnElement.className = "cat-btn flex items-center space-x-2 p-3 rounded-xl border-2 border-blue-500 bg-blue-500/10 text-blue-600 dark:text-blue-400 text-xs font-medium transition";
-}
 
 // Interface Utilisateur & Modals
 function generateIconGrid() {
@@ -439,7 +428,7 @@ function toggleTaskStatus(id) {
     if (task.status === 'completed') {
         playEffect('completion');
         triggerConfetti();
-        showToast("Tâche complétée ! Félicitations.", "success");
+        showToast("Tâche complétée !", "success");
     }
 }
 
@@ -459,7 +448,7 @@ function drop(e, category) {
     }
 }
 
-// Fonctionnalité Time-Shifting
+// Time-Shifting
 function shiftAllTasks(minutes) {
     window.tasks.forEach(task => {
         if (task.category !== 'backlog' && task.status === 'pending') {
@@ -478,7 +467,7 @@ function shiftAllTasks(minutes) {
     showToast(`Planning global décalé de +${minutes} min.`, "info");
 }
 
-// Minuteur & Session de Focus
+// Minuteur & Session Focus
 function startFocusSession(id) {
     initAudio();
     const task = window.tasks.find(t => t.id === id);
@@ -541,32 +530,6 @@ function stopTimer() {
     document.getElementById('playText').innerText = "Démarrer";
 }
 
-function updateProgressStats() {
-    const totalTasks = tasks.length;
-    const completedTasks = tasks.filter(t => t.completed).length;
-    
-    // 1. Calcul du pourcentage (0 à 100)
-    const percentage = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
-    
-    // 2. Mettre à jour le texte du pourcentage et le ratio
-    const percentElem = document.getElementById('progressPercent');
-    const ratioElem = document.getElementById('statsRatio');
-    
-    if (percentElem) percentElem.textContent = `${percentage}%`;
-    if (ratioElem) ratioElem.textContent = `${completedTasks}/${totalTasks}`;
-    
-    // 3. Calcul du remplissage SVG (Circonférence = ~100.53)
-    const circle = document.getElementById('progressCircle');
-    if (circle) {
-        const circumference = 100.53;
-        const offset = circumference - (percentage / 100) * circumference;
-        
-        // Assigner à la fois le style CSS et l'attribut SVG pour une compatibilité totale
-        circle.style.strokeDashoffset = offset;
-        circle.setAttribute('stroke-dashoffset', offset);
-    }
-}
-
 function toggleTimer() {
     if (timerInterval) {
         stopTimer();
@@ -593,7 +556,7 @@ function updateCountdownDisplay() {
     const progressPercent = totalDurationSeconds > 0 ? ((totalDurationSeconds - timeRemaining) / totalDurationSeconds) * 100 : 0;
     const circle = document.getElementById('progressCircle');
     if (circle) {
-        circle.style.strokeDashoffset = 100 - progressPercent;
+        circle.style.strokeDashoffset = 100.53 - (progressPercent / 100) * 100.53;
     }
 }
 
@@ -621,7 +584,7 @@ function updateCountdownState() {
         document.getElementById('btnPlayPause').disabled = true;
         document.getElementById('btnComplete').disabled = true;
         const circle = document.getElementById('progressCircle');
-        if (circle) circle.style.strokeDashoffset = 100;
+        if (circle) circle.style.strokeDashoffset = 100.53;
     }
 }
 
@@ -691,7 +654,7 @@ function sendSystemNotification(title, body) {
     }
 }
 
-// Fonctionnalités IA
+// Fonctionnalités d'Ajustement / IA (Adaptative Hors-Ligne)
 function applySuggestion(text) {
     const area = document.getElementById('aiPromptInput');
     if (area) area.value = text;
@@ -708,22 +671,32 @@ async function runAIOptimizer(e) {
     if (spinner) spinner.classList.remove('hidden');
     if (btn) btn.disabled = true;
     
+    // Détection des minutes demandées dans le texte ou décalage par défaut (+30 min)
+    let minutesToShift = 30;
+    const match = prompt.match(/(\d+)\s*min/i);
+    if (match && match[1]) {
+        minutesToShift = parseInt(match[1]);
+    } else if (prompt.toLowerCase().includes('1h')) {
+        minutesToShift = 60;
+    }
+
     setTimeout(() => {
         if (spinner) spinner.classList.add('hidden');
         if (btn) btn.disabled = false;
         
-        shiftAllTasks(30);
+        shiftAllTasks(minutesToShift);
         toggleModal('aiAssistantModal');
-        showToast("L'IA a réorganisé votre planning (+30 min) !", "success");
-    }, 1500);
+        showToast(`Planning réorganisé (+${minutesToShift} min) !`, "success");
+    }, 800);
 }
+
 async function breakdownTaskWithAI() {
     const btn = document.getElementById('btnAIDecompose');
     const originalHTML = btn.innerHTML;
     
     try {
         btn.disabled = true;
-        btn.innerHTML = `<i class="fa-solid fa-circle-notch animate-spin text-xs"></i> <span>Analyse...</span>`;
+        btn.innerHTML = `<i class="fa-solid fa-circle-notch animate-spin text-xs"></i> <span>Décomposition...</span>`;
         
         const taskTitle = document.getElementById('taskTitle').value;
         const duration = parseInt(document.getElementById('taskDuration').value) || 30;
@@ -738,7 +711,7 @@ async function breakdownTaskWithAI() {
         const parts = Math.max(2, Math.floor(duration / 20));
         let subTasks = [];
         for (let i = 1; i <= parts; i++) {
-            subTasks.push(`Étape ${i} : Déclinaison de ${taskTitle}`);
+            subTasks.push(`Étape ${i} : ${taskTitle}`);
         }
 
         if (subTasks.length > 0 && timeInput) {
@@ -770,14 +743,33 @@ async function breakdownTaskWithAI() {
             updateCountdownState();
             
             playEffect('completion');
-            showToast("Sous-tâches générées par l'IA ! ✨", "success");
+            showToast("Sous-tâches générées avec succès ! ✨", "success");
             toggleModal('taskModal');
         }
     } catch (err) {
-        showToast("Échec de la décomposition avec l'IA.", "info");
+        showToast("Échec de la décomposition.", "info");
     } finally {
         btn.disabled = false;
         btn.innerHTML = originalHTML;
+    }
+}
+
+
+// appel grok 
+async function askGroq(userPrompt) {
+    try {
+        const response = await fetch("/.netlify/functions/groq", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({ prompt: userPrompt })
+        });
+        
+        const data = await response.json();
+        return data;
+    } catch (error) {
+        console.error("Erreur lors de l'appel à la fonction Netlify:", error);
     }
 }
 
@@ -835,81 +827,3 @@ window.exportBackup = exportBackup;
 window.importBackup = importBackup;
 window.allowDrop = allowDrop;
 window.drop = drop;
-
-// ==========================================
-// 1. CONFIGURATION & FONCTIONS IA (GROQ)
-// ==========================================
-
-const GROQ_API_KEY = "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";
-
-async function replanifierAjustement(explicationUtilisateur, listeTachesActuelles) {
-    const tachesFormattees = JSON.stringify(listeTachesActuelles);
-    
-    const systemPrompt = `
-Tu es l'assistant intelligent de l'application Flexiz.
-L'utilisateur fait face à un imprévu.
-Voici son planning actuel au format JSON : ${tachesFormattees}.
-
-Consignes :
-1. Analyse l'imprévu ou le retard expliqué par l'utilisateur.
-2. Décale ou réorganise TOUTES les tâches impactées en conséquence directe de la durée indiquée.
-3. Ta réponse doit obligatoirement expliquer clairement le décalage effectué pour chaque tâche.
-`;
-    
-    try {
-        const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-            method: "POST",
-            headers: {
-                "Authorization": `Bearer ${GROQ_API_KEY}`,
-                "Content-Type": "application/json"
-            },
-            body: JSON.stringify({
-                model: "llama-3.3-70b-versatile",
-                messages: [
-                    { role: "system", content: systemPrompt },
-                    { role: "user", content: explicationUtilisateur }
-                ]
-            })
-        });
-        
-        const data = await response.json();
-        return data.choices[0].message.content;
-        
-    } catch (erreur) {
-        console.error("Erreur lors de la replanification :", erreur);
-        return "Impossible de contacter l'assistant pour le moment.";
-    }
-}
-
-
-// ==========================================
-// 2. ÉCOUTEUR D'ÉVÉNEMENT (BOUTON ASSISTANT)
-// ==========================================
-
-// On attend que le DOM (HTML) soit totalement chargé
-document.addEventListener("DOMContentLoaded", () => {
-    
-    // Récupération des éléments HTML par leurs ID réels (adapte les ID si besoin)
-    const monBoutonAssistant = document.getElementById("aiAssistantModal"); // Ton bouton d'envoi
-    const inputUtilisateur = document.getElementById("aiPromptInput"); // Ton champ texte/prompt
-    const zoneMessageIA = document.getElementById("reponse-ia"); // La zone d'affichage du résultat
-    
-    if (monBoutonAssistant) {
-        monBoutonAssistant.addEventListener("click", async () => {
-            const explication = inputUtilisateur.value.trim();
-            if (!explication) return;
-            
-            // Indication visuelle de chargement
-            zoneMessageIA.textContent = "Analyse du retard et calcul du nouveau planning...";
-            
-            // Récupère tes tâches (remplace par ton tableau ou ta variable globale de tâches)
-            const tachesActuelles = window.mesTachesFlexiz || [];
-            
-            // Envoi de la demande
-            const reponseIA = await replanifierAjustement(explication, tachesActuelles);
-            
-            // Affichage de la réponse ajustée
-            zoneMessageIA.textContent = reponseIA;
-        });
-    }
-});
